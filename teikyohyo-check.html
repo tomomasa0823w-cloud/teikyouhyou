@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提供票チェックツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{--navy:#123a63;--blue:#2f6fb0;--blueL:#e8f1fa;--ok:#1f7a44;--okBg:#e7f5ec;--ng:#c0392b;--ngBg:#fdecea;--warn:#a8791b;--warnBg:#fef6e6;--line:#d5dee8;--ink:#20303f;--muted:#6b7a89;}
+  *{box-sizing:border-box}
+  body{font-family:"Meiryo","メイリオ",sans-serif;margin:0;background:#f2f5f8;color:var(--ink);font-size:14px;line-height:1.6}
+  header{background:var(--navy);color:#fff;padding:16px 22px}
+  header h1{margin:0;font-size:19px}
+  header .sub{font-size:12px;opacity:.85;margin-top:3px}
+  .wrap{max-width:1220px;margin:0 auto;padding:18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px;margin-bottom:16px}
+  .drops{display:flex;gap:12px;flex-wrap:wrap}
+  .drop{flex:1;min-width:250px;border:2px dashed var(--blue);border-radius:8px;background:var(--blueL);padding:16px;text-align:center;cursor:pointer;transition:.15s}
+  .drop.opt{border-color:#b9c8d8;background:#f5f8fb}
+  .drop:hover{background:#dcebfa}.drop.on{background:#cfe4f8;border-color:var(--navy)}
+  .drop .t{font-weight:bold;color:var(--navy);font-size:14px}
+  .drop .d{font-size:11px;color:var(--muted);margin-top:3px}
+  .drop .f{font-size:11px;margin-top:6px;color:var(--ok);font-weight:bold;word-break:break-all}
+  .drop input{display:none}
+  .runbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px}
+  button.run{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:11px 26px;font-size:15px;font-family:inherit;cursor:pointer;font-weight:bold}
+  button.run:disabled{background:#9fb0c1;cursor:not-allowed}
+  button.sub{background:#fff;color:var(--navy);border:1px solid var(--navy);border-radius:6px;padding:8px 16px;font-family:inherit;cursor:pointer;font-size:13px}
+  .status{font-size:13px;color:var(--muted)}
+  .tabs{display:flex;gap:5px;border-bottom:2px solid var(--line);flex-wrap:wrap}
+  .tab{padding:9px 13px;cursor:pointer;font-weight:bold;color:var(--muted);border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;font-size:13px}
+  .tab.act{color:var(--navy);background:#fff;border-color:var(--line);position:relative;top:2px}
+  .tab .badge{display:inline-block;min-width:18px;padding:1px 5px;border-radius:10px;font-size:11px;margin-left:5px;color:#fff;text-align:center}
+  .badge.ng{background:var(--ng)}.badge.ok{background:var(--ok)}.badge.warn{background:var(--warn)}.badge.off{background:#9fb0c1}
+  .panel{display:none;background:#fff;border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;padding:16px}
+  .panel.act{display:block}
+  .desc{font-size:12.5px;color:var(--muted);background:#f7fafd;border-left:3px solid var(--blue);padding:8px 12px;margin-bottom:12px;border-radius:0 4px 4px 0}
+  .summ{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .chip{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:bold}
+  .chip.ok{background:var(--okBg);color:var(--ok)}.chip.ng{background:var(--ngBg);color:var(--ng)}.chip.warn{background:var(--warnBg);color:var(--warn)}.chip.all{background:var(--blueL);color:var(--navy)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  th{background:var(--navy);color:#fff;font-weight:bold;position:sticky;top:0;z-index:1}
+  tr.ok td{background:var(--okBg)}tr.ng td{background:var(--ngBg)}tr.warn td{background:var(--warnBg)}
+  .jd{font-weight:bold;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap}
+  .jd.ok{background:var(--ok);color:#fff}.jd.ng{background:var(--ng);color:#fff}.jd.warn{background:var(--warn);color:#fff}
+  .days{font-family:"Consolas",monospace;font-size:12px}.miss{color:var(--ng);font-weight:bold}
+  .filter{margin-bottom:10px;font-size:13px}.filter label{margin-right:14px;cursor:pointer}
+  .empty{color:var(--muted);padding:20px;text-align:center}.pg{color:var(--muted);font-size:11px}
+  .offmsg{padding:16px;background:#f7fafd;border:1px dashed var(--line);border-radius:6px;color:var(--muted);font-size:13px}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  @media print{header,.drops,.runbar,.tabs .tab:not(.act),.filter,button{display:none!important}.panel{display:block!important;border:0}.card{border:0;padding:0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>提供票チェックツール</h1>
+  <div class="sub">サービス提供票（PDF）を主軸に9項目を点検。対象年月はPDFから自動判定します。管理表(Excel)は取り込んだ時だけ照合します。端末内処理・データは外部送信されません。</div>
+</header>
+<div class="wrap">
+  <div class="card">
+    <div class="drops">
+      <label class="drop" id="dropPdf">
+        <div class="t">① サービス提供票 PDF <span style="color:#c0392b">必須</span></div>
+        <div class="d">「提供票2026年08月分…」をドロップ / クリック</div>
+        <div class="f" id="pdfName"></div>
+        <input type="file" id="pdfInput" accept="application/pdf">
+      </label>
+      <label class="drop opt" id="dropKanri">
+        <div class="t">口腔・スクリーニング管理簿（任意・②⑧用）</div>
+        <div class="d">1枚のExcelで両方を照合／未取込なら②⑧はスキップ</div>
+        <div class="f" id="kanriName"></div>
+        <input type="file" id="kanriInput" accept=".xlsx,.xls">
+      </label>
+    </div>
+    <div class="runbar">
+      <button class="run" id="runBtn" disabled>チェック実行</button>
+      <span class="status" id="status">提供票PDFを読み込んでください。</span>
+    </div>
+    <div class="hint">※ 日付欄のズレを座標で読み取るため、加工前のPDFをそのまま使ってください。単位数のチェック（⑥⑨）は別表（第7表）を読み取ります。</div>
+  </div>
+
+  <div id="results" style="display:none">
+    <div class="card">
+      <div class="tabs">
+        <div class="tab act" data-t="1">① 通所介護3項目</div>
+        <div class="tab" data-t="2">② 口腔加算</div>
+        <div class="tab" data-t="3">③ 事業対象者11/12</div>
+        <div class="tab" data-t="4">④ 送迎減算</div>
+        <div class="tab" data-t="5">⑤ 実績ゼロ</div>
+        <div class="tab" data-t="6">⑥ 提供体制加算</div>
+        <div class="tab" data-t="7">⑧⑨ 栄養スクリーニング</div>
+        <div class="tab" data-t="8">⑩ 皆勤者</div>
+      </div>
+
+      <div class="panel act" id="panel1">
+        <div class="desc">要介護1〜5の方について、<b>通所介護本体</b>・<b>個別機能訓練加算Ⅰ2</b>・<b>サービス提供体制加算Ⅰ</b> の実績日が3つとも一致しているか。</div>
+        <div class="summ" id="summ1"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="1"> 不一致のみ</label></div>
+        <div id="tbl1"></div>
+      </div>
+      <div class="panel" id="panel2">
+        <div class="desc">口腔ケア管理表の実施日と、提供票の<b>口腔機能向上加算Ⅰ・Ⅱ</b>の実績日が一致しているか。<b>管理表を取り込んだ時のみ</b>照合します。</div>
+        <div class="summ" id="summ2"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="2"> 不一致・要確認のみ</label></div>
+        <div id="tbl2"></div>
+      </div>
+      <div class="panel" id="panel3">
+        <div class="desc">事業対象者について、予定の曜日が週2回なら<b>通所サービス12</b>、週1回なら<b>11</b>か（振替の単発曜日は無視して判定）。</div>
+        <div class="summ" id="summ3"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="3"> 不一致・要確認のみ</label></div>
+        <div id="tbl3"></div>
+      </div>
+      <div class="panel" id="panel4">
+        <div class="desc"><b>送迎減算</b>の一覧。送迎減算日と本体実績日を並べ、さらに<b>⑦ 送迎減算の種別（基準緩和型／介護予防型／通所介護）が本体と一致</b>しているかを判定します。</div>
+        <div class="summ" id="summ4"></div>
+        <div id="tbl4"></div>
+      </div>
+      <div class="panel" id="panel5">
+        <div class="desc">全サービスの<b>実績が1件も無い</b>方の一覧（今月の提供票配布が不要な破棄候補）。</div>
+        <div class="summ" id="summ5"></div>
+        <div id="tbl5"></div>
+      </div>
+      <div class="panel" id="panel6">
+        <div class="desc"><b>⑥</b> 介護予防型で<b>週2回</b>利用の方の<b>サービス提供体制加算が176単位（A66012）</b>か。88単位なら単位不足でNG（基準緩和型は算定しないため対象外）。</div>
+        <div class="summ" id="summ6"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="6"> 不一致・要確認のみ</label></div>
+        <div id="tbl6"></div>
+      </div>
+      <div class="panel" id="panel7">
+        <div class="desc"><b>⑨</b> 口腔機能向上加算の算定者は、口腔栄養スクリーニング加算が<b>5単位</b>か（20単位ならNG）。<b>⑧</b> スクリーニング管理表を取り込むと、当月の算定対象者に加算が入っているか（漏れ／算定月違い）も照合します。</div>
+        <div class="summ" id="summ7"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="7"> 不一致・要確認のみ</label></div>
+        <div id="tbl7"></div>
+      </div>
+      <div class="panel" id="panel8">
+        <div class="desc"><b>⑩ 皆勤者</b>（本体サービスの<b>予定回数と実績回数が一致</b>する方。振替で利用日が変わっても回数が合えば皆勤とみなします）を、<b>利用曜日 × 午前(AM)／午後(PM)</b> に分けて出力します。曜日は予定（本来の利用曜日）で分類し、複数曜日を利用する方は各曜日に表示されます。<br><span style="color:#a8791b">※ 月末の実績確定後のPDFで実行してください（作成途中だと実績が予定に届かず皆勤者が少なく出ます）。</span></div>
+        <div class="summ" id="summ8"></div>
+        <div id="tbl8"></div>
+      </div>
+    </div>
+    <div class="runbar" style="justify-content:flex-end">
+      <button class="sub" id="csvBtn">結果をCSVでコピー</button>
+      <button class="sub" onclick="window.print()">印刷 / PDF保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+let YEAR=2026,MONTH=8;const WD=["日","月","火","水","木","金","土"];
+const FACILITY=/&|フィットネス|寿リハ|リハビリ|スカイ|ＡＩＭ|AIM|株式会社/;
+const KMAP={"髙":"高","﨑":"崎","嵜":"崎","齋":"斎","齊":"斎","斉":"斎","邊":"辺","邉":"辺","德":"徳","眞":"真","廣":"広","惠":"恵","冨":"富","栁":"柳","濵":"浜","濱":"浜","𠮷":"吉"};
+function norm(s){if(!s)return"";s=String(s).replace(/[（(].*?[）)]/g,"").replace(/様|さん|殿/g,"");s=s.replace(/[\s\u3000・･,、.\-‐―ｰ]/g,"");s=s.replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));return s.split("").map(c=>KMAP[c]||c).join("");}
+
+/* ---- サービス分類（種別付き） ---- */
+function classify(nm){
+  let n=nm.replace(/[ \u3000]/g,"").replace(/\d{1,2}:\d{2}/g,"").replace(/[〜～~]/g,"");
+  const type=/基準緩和型/.test(n)?"基準緩和":/介護予防型/.test(n)?"介護予防":/通所介護/.test(n)?"通所介護":"";
+  const add=/加算|減算|口腔|ＡＤＬ|ADL|科学的|処遇|入浴|栄養|提供体制|個別|スクリーニング/.test(n);
+  let cls=null;
+  if(n.includes("送迎減算"))cls="送迎減算";
+  else if(n.includes("口腔栄養スクリーニング"))cls="栄養スクリーニング";
+  else if(n.includes("口腔機能向上加算"))cls=n.includes("Ⅱ")?"口腔Ⅱ":"口腔Ⅰ";
+  else if(n.includes("個別機能訓練加算"))cls=/Ⅰ[２2]/.test(n)?"個別Ⅰ2":"個別Ⅰ1";
+  else if(n.includes("サービス提供体制加算"))cls="提供体制";
+  else if(n.includes("通所介護")&&!add&&/(1[1-9]|１[１-９])$/.test(n))cls="本体介護";
+  else if(/(基準緩和型|介護予防型)通所サービス/.test(n)&&!add){cls=/(12|１２)$/.test(n)?"基準12":/(11|１１)$/.test(n)?"基準11":"基準本体";}
+  return {cls,type};
+}
+
+/* ---- 氏名（座標ベース） ---- */
+function extractName(items){
+  let fr=items.find(it=>it.s.replace(/\s/g,"").includes("フリガナ"));
+  let sm=items.filter(it=>it.s.includes("様"));let target=null;
+  if(fr){let c=sm.filter(it=>it.y<fr.y&&fr.y-it.y<22);if(c.length)target=c.reduce((a,b)=>Math.abs(a.y-(fr.y-12))<Math.abs(b.y-(fr.y-12))?a:b);}
+  if(!target){let lab=items.find(it=>it.s.includes("⽒")||it.s.includes("被保険"));if(lab)target=sm.filter(it=>Math.abs(it.y-lab.y)<8).sort((a,b)=>b.x-a.x)[0];}
+  if(!target&&sm.length)target=sm[0];if(!target)return"?";
+  return items.filter(it=>Math.abs(it.y-target.y)<5&&it.x>=275&&it.x<640).map(it=>({x:it.x,t:it.s.replace(/様.*$/,"").replace(/[（(].*?[）)]/g,"")})).sort((a,b)=>a.x-b.x).map(o=>o.t).join("").replace(/[^一-龥々ヶぁ-ん]/g,"").slice(0,6)||"?";
+}
+
+/* ---- 第6表 ---- */
+function parsePage(items,idx){
+  const fns=items.map(i=>i.s).join("").replace(/\s/g,"");
+  if(!(fns.includes("サービス提供票")&&fns.includes("要介護状態区分")))return null;
+  const f2=fns.replace(/要介護状態区分|要支援状態区分/g,"");const km=f2.match(/(事業対象者|要支援[12１２]|要介護[1-5１-５])/);
+  const kubun=km?km[1].replace(/[１-５]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)):"?";
+  const name=extractName(items);
+  const byY={};items.forEach(it=>{const k=Math.round(it.y);(byY[k]=byY[k]||[]).push(it);});
+  let hy=null,hn=0;for(const k in byY){const c=byY[k].filter(it=>/^\d+$/.test(it.s)&&+it.s>=1&&+it.s<=31).length;if(c>hn){hn=c;hy=+k;}}
+  if(hn<20)return null;
+  const header=byY[hy].filter(it=>/^\d+$/.test(it.s)&&+it.s>=1&&+it.s<=31).sort((a,b)=>a.x-b.x);
+  const dc=header.map(it=>({d:+it.s,xc:it.x+it.w/2}));const minx=dc[0].xc,maxx=dc[dc.length-1].xc;
+  const near=xc=>dc.reduce((a,b)=>Math.abs(b.xc-xc)<Math.abs(a.xc-xc)?b:a).d;
+  const digits=[];items.forEach(it=>{if(/^\d+$/.test(it.s)){const xc=it.x+it.w/2;if(xc>=minx-7&&xc<=maxx+7)digits.push({d:near(xc),y:it.y});}});
+  const rday=y=>{const s=new Set();digits.forEach(g=>{if(Math.abs(g.y-y)<7)s.add(g.d);});return s;};
+  const namew=items.filter(it=>it.x>20&&it.x<175&&!FACILITY.test(it.s));
+  const codeYs=items.filter(it=>/A6\d{4}|15\d{4}|78\d{4}/.test(it.s)).map(it=>it.y).sort((a,b)=>b-a);
+  const labels=items.filter(it=>it.x>=342&&it.x<=348&&/^[予実定績]$/.test(it.s)).map(it=>({y:it.y,t:(it.s==="実"||it.s==="績")?"実績":"予定"}));
+  const svc={};let allj=new Set();
+  for(let j=0;j<codeYs.length;j++){const cy=codeYs[j],ny=(j+1<codeYs.length)?codeYs[j+1]:cy-14;
+    const seg=namew.filter(it=>it.y>ny+2&&it.y<=cy+2).sort((a,b)=>b.y-a.y||a.x-b.x);
+    const nm=seg.map(it=>it.s).join("").replace(/\d{1,2}:\d{2}/g,"");const {cls,type}=classify(nm);
+    const pick=(t)=>{let best=null;labels.forEach(l=>{if(l.t===t&&l.y>ny+1&&l.y<cy+8){if(best==null||l.y>best)best=l.y;}});return best;};
+    const ji=pick("実績"),yo=pick("予定");const jd=ji!=null?rday(ji):new Set(),yd=yo!=null?rday(yo):new Set();
+    jd.forEach(d=>allj.add(d));
+    if(cls){if(!svc[cls])svc[cls]={j:new Set(),y:new Set(),type};jd.forEach(d=>svc[cls].j.add(d));yd.forEach(d=>svc[cls].y.add(d));}}
+  const times=items.filter(it=>it.x<70&&/\d{1,2}:\d{2}/.test(it.s)).sort((a,b)=>b.y-a.y);
+  const t0=times.length?(times[0].s.match(/(\d{1,2}):\d{2}/)||[])[1]:null;
+  const ampm=t0==null?"?":(+t0<12?"AM":"PM");
+  return{idx,name,nn:norm(name),kubun,svc,allj,ampm};
+}
+
+/* ---- 別表（単位数） ---- */
+function parseBetsu(items){
+  const fns=items.map(i=>i.s).join("").replace(/\s/g,"");
+  if(fns.includes("要介護状態区分"))return null;
+  if(!(fns.includes("処遇改善")||fns.includes("種類支給限度")))return null;
+  const nmM=fns.match(/([一-龥々ヶ]{2,8})様\(?\d{10}/);const nn=nmM?norm(nmM[1]):null;
+  const codes=items.filter(i=>/^(A6\d{4}|15\d{4}|78\d{4})$/.test(i.s));
+  const bs={};
+  codes.forEach(c=>{
+    const seg=items.filter(i=>Math.abs(i.y-c.y)<14&&i.x>150&&i.x<c.x-2).sort((a,b)=>b.y-a.y||a.x-b.x).map(i=>i.s).join("");
+    const u=items.filter(i=>Math.abs(i.y-c.y)<4&&i.x>c.x&&i.x<320&&/^\d+$/.test(i.s)).sort((a,b)=>a.x-b.x)[0];
+    const {cls,type}=classify(seg);
+    if(cls&&!bs[cls])bs[cls]={code:c.s,unit:u?+u.s:null,type};
+  });
+  return {nn,bs};
+}
+
+async function parsePDF(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const U=[],B=[];let ymSet=false;
+  for(let p=1;p<=pdf.numPages;p++){
+    const tc=await(await pdf.getPage(p)).getTextContent();
+    const items=tc.items.filter(it=>it.str!=="").map(it=>({s:it.str,x:it.transform[4],y:it.transform[5],w:it.width}));
+    if(!ymSet){const full=items.map(i=>i.s).join("").replace(/\s/g,"");const ym=full.match(/令和(\d+)年(\d+)月分/);if(ym){YEAR=2018+(+ym[1]);MONTH=+ym[2];ymSet=true;}}
+    const u=parsePage(items,p-1);
+    if(u){U.push(u);continue;}
+    const b=parseBetsu(items);if(b&&b.nn)B.push(b);
+  }
+  const bmap={};B.forEach(b=>{if(!bmap[b.nn])bmap[b.nn]=b;});
+  U.forEach(u=>{u.betsu=bmap[u.nn]||null;});
+  return U;
+}
+
+/* ---- 口腔ケア管理表（新様式：口腔管理表シートの当月①②列＋口腔加算=対象／旧様式も互換） ---- */
+function parseKoku(buf){
+  const wb=XLSX.read(new Uint8Array(buf),{type:"array"});const map={};
+  const ss=wb.SheetNames.filter(sn=>/口腔管理表|口腔ケア/.test(sn));
+  for(const sn of (ss.length?ss:wb.SheetNames)){
+    const ao=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
+    // 当月ヘッダー行と列範囲（当月〜次月ヘッダーの手前まで＝①②）
+    let mr=-1,c8s=-1,c8e=-1;
+    for(let r=0;r<Math.min(ao.length,6)&&mr<0;r++){const row=ao[r]||[];
+      for(let c=0;c<row.length;c++){const v=row[c]?String(row[c]).replace(/\s/g,""):"";
+        if(v===MONTH+"月"){mr=r;c8s=c;c8e=c+1;break;}} // 各月は①②の2列
+    }
+    if(mr<0)continue;
+    // 氏名列・口腔加算列
+    let nc=-1,ec=-1,dcol=-1;
+    for(let r=Math.max(0,mr-1);r<=mr+1&&r<ao.length;r++){const row=ao[r]||[];for(let c=0;c<row.length;c++){const v=row[c]?String(row[c]).replace(/\s/g,""):"";if(v.includes("氏名"))nc=c;if(v.includes("口腔加算"))ec=c;if(v==="区分")dcol=c;}}
+    if(nc<0){for(let r=mr;r>=Math.max(0,mr-3)&&nc<0;r--){for(let cc=0;cc<c8s;cc++){const v=ao[r]&&ao[r][cc];if(v!=null&&String(v).replace(/\s/g,"").includes("氏名"))nc=cc;}}}
+    if(nc<0)continue;
+    for(let r=mr+1;r<ao.length;r++){const nm=ao[r]&&ao[r][nc];if(nm==null||String(nm).trim()===""||String(nm).replace(/\s/g,"").includes("氏名")||String(nm).includes("例"))continue;
+      const nn=norm(nm);if(!nn||nn.length<2)continue;
+      if(ec>=0){const kk=ao[r][ec]?String(ao[r][ec]):"";if(kk&&!/対象/.test(kk))continue;} // 別デイ・自費・希望なし等は除外
+      const days=new Set();for(let c=c8s;c<=c8e;c++){const d=toDay(ao[r][c]);if(d)days.add(d);}
+      if(!map[nn])map[nn]={name:String(nm).trim(),days:new Set()};days.forEach(d=>map[nn].days.add(d));}
+  }
+  return map;
+}
+function toDay(v){if(v==null)return 0;if(typeof v==="number")return(v>=1&&v<=31)?Math.floor(v):0;const m=String(v).match(/^\s*(\d{1,2})\s*$/);return m&&+m[1]>=1&&+m[1]<=31?+m[1]:0;}
+
+/* ---- スクリーニング管理表（新様式：実施月列＋算定=対象／ひな形の算定サイクル列も対応） ---- */
+function parseScr(buf){
+  const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
+  const target={},excl={};
+  const ss=wb.SheetNames.filter(sn=>/スクリ/.test(sn));
+  for(const sn of (ss.length?ss:wb.SheetNames)){
+    const ao=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
+    let hr=-1,nc=-1,mc=-1,gc=-1;
+    for(let r=0;r<Math.min(ao.length,8);r++){const row=ao[r]||[];let a=-1,b=-1,g=-1;
+      for(let c=0;c<row.length;c++){const v=row[c]?String(row[c]).replace(/\s/g,""):"";
+        if(v.includes("氏名"))a=c;if(v.includes("実施月")||v.includes("算定サイクル")||v==="サイクル")b=c;if(v==="算定"||v.includes("スクリ算定"))g=c;}
+      if(a>=0&&b>=0&&a!==b){hr=r;nc=a;mc=b;gc=g;break;}}
+    if(hr<0)continue;
+    for(let r=hr+1;r<ao.length;r++){const nm=ao[r]&&ao[r][nc];if(nm==null||String(nm).trim()===""||String(nm).replace(/\s/g,"").includes("氏名")||String(nm).includes("例"))continue;
+      const nn=norm(nm);if(!nn||nn.length<2)continue;
+      const g=gc>=0&&ao[r][gc]?String(ao[r][gc]):"対象";if(!/対象|記録/.test(g)){excl[nn]=true;continue;} // 別デイ・自費・希望なし等
+      const cyc=ao[r][mc]?String(ao[r][mc]).replace(/\s/g,""):"";
+      if(cyc.includes("算定なし")||cyc.includes("算定無")){excl[nn]=true;continue;}
+      if(new RegExp("(^|・)"+MONTH+"(・|月|$)").test(cyc))target[nn]={name:String(nm).trim()};}
+  }
+  return {target,excl};
+}
+
+/* ======== チェック ======== */
+let R={},KOKU=null,SCR=null;
+const arr=s=>[...s].sort((a,b)=>a-b);
+const eq=(a,b)=>{if(a.size!==b.size)return false;for(const x of a)if(!b.has(x))return false;return true;};
+const diff=(a,b)=>[...a].filter(x=>!b.has(x)).sort((x,y)=>x-y);
+const ds=s=>s&&s.size?arr(s).join(","):"―";
+function bodyDays(u){const s=new Set();["本体介護","基準11","基準12","基準本体"].forEach(k=>{if(u.svc[k])u.svc[k].j.forEach(d=>s.add(d));});return s;}
+function bodyType(u){const b=u.svc["本体介護"]||u.svc["基準11"]||u.svc["基準12"]||u.svc["基準本体"];return b?b.type:"";}
+function weekCount(u){const b=u.svc["基準12"]||u.svc["基準11"]||u.svc["基準本体"];if(!b)return{pw:0,wds:new Set()};const ys=(b.y&&b.y.size)?b.y:b.j;const wc={};[...ys].forEach(d=>{const w=new Date(YEAR,MONTH-1,d).getDay();wc[w]=(wc[w]||0)+1;});let mw=Object.keys(wc).filter(w=>wc[w]>=2).map(Number);if(!mw.length)mw=Object.keys(wc).map(Number);return{pw:mw.length,wds:new Set(mw)};}
+
+function runChecks(users){
+  // ①
+  const c1=[];
+  users.filter(u=>/^要介護[1-5]$/.test(u.kubun)).forEach(u=>{
+    const hon=u.svc["本体介護"]?u.svc["本体介護"].j:new Set();
+    const kun=new Set([...(u.svc["個別Ⅰ2"]?u.svc["個別Ⅰ2"].j:[]),...(u.svc["個別Ⅰ1"]?u.svc["個別Ⅰ1"].j:[])]);
+    const tei=u.svc["提供体制"]?u.svc["提供体制"].j:new Set();
+    const ok=eq(hon,kun)&&eq(hon,tei);let det=[];
+    if(!ok){if(diff(hon,kun).length)det.push("個別機能訓練加算に無い日:"+diff(hon,kun).join(","));if(diff(hon,tei).length)det.push("提供体制に無い日:"+diff(hon,tei).join(","));if(diff(kun,hon).length)det.push("本体に無い日(個別):"+diff(kun,hon).join(","));if(diff(tei,hon).length)det.push("本体に無い日(提供体制):"+diff(tei,hon).join(","));}
+    c1.push({name:u.name,idx:u.idx,kubun:u.kubun,status:ok?"ok":"ng",hon:ds(hon),kun:ds(kun),tei:ds(tei),detail:det.join(" / ")});
+  });
+  // ② 口腔（管理表任意）
+  let c2=null;
+  if(KOKU){c2=[];for(const nn in KOKU){const rec=KOKU[nn];const u=users.find(x=>x.nn===nn)||users.find(x=>x.nn&&nn.length>=2&&(x.nn.includes(nn)||nn.includes(x.nn)));
+    if(!u){c2.push({name:rec.name,kubun:"—",status:"warn",kanri:ds(rec.days),teikyo:"（今月の提供票なし）",detail:"提供票に該当者なし 要確認"});continue;}
+    const js=new Set([...(u.svc["口腔Ⅱ"]?u.svc["口腔Ⅱ"].j:[]),...(u.svc["口腔Ⅰ"]?u.svc["口腔Ⅰ"].j:[])]);const ok=eq(rec.days,js);let det="";
+    if(!ok){const a=diff(rec.days,js),b=diff(js,rec.days);if(a.length)det+="管理表のみ:"+a.join(",")+" ";if(b.length)det+="提供票のみ:"+b.join(",");}
+    c2.push({name:u.name,idx:u.idx,kubun:u.kubun,status:ok?"ok":"ng",kanri:ds(rec.days),teikyo:ds(js),detail:det.trim()});}}
+  // ③
+  const c3=[];
+  users.filter(u=>u.kubun==="事業対象者").forEach(u=>{
+    const h11=u.svc["基準11"],h12=u.svc["基準12"],svc=h12||h11||u.svc["基準本体"];
+    const used=h12?"12":(h11?"11":"—");
+    if(!svc){c3.push({name:u.name,idx:u.idx,used:"（本体なし）",wd:"—",pw:"—",expect:"—",status:"warn",detail:"通所サービス本体が見つからず 要確認"});return;}
+    const {pw,wds}=weekCount(u);const expIs12=pw>=2,expect=pw>=2?"12":(pw===1?"11":"—");let status="ok",detail="";
+    if((h11||h12)&&(!!h12)!==expIs12){status="ng";detail=`予定 週${pw}回（${[...wds].sort().map(w=>WD[w]).join("・")}）→ ${expect} が適切`;}
+    c3.push({name:u.name,idx:u.idx,used,wd:[...wds].sort().map(w=>WD[w]).join("・")||"—",pw,expect,status,detail});
+  });
+  // ④ 送迎減算 + ⑦種別
+  const c4=[];
+  users.filter(u=>u.svc["送迎減算"]).forEach(u=>{
+    const sd=u.svc["送迎減算"].j,hon=bodyDays(u);const extra=diff(sd,hon);
+    const sgType=u.svc["送迎減算"].type,btype=bodyType(u);
+    let status="ok",det=[];
+    if(sgType&&btype&&sgType!==btype){status="ng";det.push(`種別不一致：本体[${btype}]≠送迎減算[${sgType}]`);}
+    if(extra.length){if(status==="ok")status="warn";det.push("本体実績が無い日に送迎減算:"+extra.join(","));}
+    c4.push({name:u.name,idx:u.idx,kubun:u.kubun,soge:ds(sd),hon:ds(hon),btype:btype||"—",sgtype:sgType||"—",status,detail:det.join(" / ")});
+  });
+  // ⑤
+  const c5=users.filter(u=>u.allj.size===0).map(u=>({name:u.name,idx:u.idx,kubun:u.kubun}));
+  // ⑥ 介護予防・週2 提供体制176
+  const c6=[];
+  users.filter(u=>u.kubun==="事業対象者").forEach(u=>{
+    const body=u.svc["基準12"]||u.svc["基準11"]||u.svc["基準本体"];if(!body||body.type!=="介護予防")return;
+    const {pw,wds}=weekCount(u);if(pw<2)return; // 週2のみ対象
+    const pv=u.betsu&&u.betsu.bs["提供体制"];const unit=pv?pv.unit:null;
+    let status="ok",detail="";
+    if(unit==null){status="warn";detail="別表から提供体制加算の単位を取得できず";}
+    else if(unit!==176){status="ng";detail=`提供体制加算=${unit}単位（週2は176単位が適切）`;}
+    c6.push({name:u.name,idx:u.idx,wd:[...wds].sort().map(w=>WD[w]).join("・"),unit:unit==null?"?":unit,status,detail});
+  });
+  // ⑦⑧⑨ 栄養スクリーニング
+  const c7=[];
+  users.forEach(u=>{
+    const koku=u.svc["口腔Ⅰ"]||u.svc["口腔Ⅱ"];const es6=u.svc["栄養スクリーニング"];
+    const esU=u.betsu&&u.betsu.bs["栄養スクリーニング"]?u.betsu.bs["栄養スクリーニング"].unit:null;
+    const isTarget=SCR?!!SCR.target[u.nn]:null;const isExcl=SCR?!!SCR.excl[u.nn]:false;
+    let status="ok",det=[];
+    // ⑨ 口腔者の単位5
+    if(koku&&es6){if(esU!=null&&esU!==5){status="ng";det.push(`栄養スクリーニング=${esU}単位（口腔機能向上加算あり→5単位が適切）`);}}
+    // ⑧ 管理表照合（任意）
+    if(SCR&&!isExcl){
+      if(isTarget&&!es6){status="ng";det.push(MONTH+"月算定対象だが栄養スクリーニング加算なし（漏れ）");}
+      if(!isTarget&&es6){if(status==="ok")status="warn";det.push("管理表で"+MONTH+"月は算定月でないのに算定（算定月違い）");}
+    }
+    // 表示対象：口腔者 or 栄養スク算定者 or 8月対象
+    if(koku||es6||isTarget){
+      c7.push({name:u.name,idx:u.idx,kubun:u.kubun,koku:koku?"あり":"—",es:es6?"あり":"なし",unit:esU==null?(es6?"?":"—"):esU,tgt:SCR?(isExcl?"算定なし":(isTarget?MONTH+"月対象":"—")):"（管理表なし）",status,detail:det.join(" / ")});
+    }
+  });
+
+  // ⑩ 皆勤者（本体の予定日が全て実績にある）を 曜日×AM/PM で
+  const c8=[];
+  users.forEach(u=>{
+    const body=u.svc["本体介護"]||u.svc["基準11"]||u.svc["基準12"]||u.svc["基準本体"];
+    if(!body||!body.y.size)return;
+    const zenkin=body.y.size>0&&body.y.size===body.j.size;
+    if(!zenkin)return;
+    const wds=[...new Set([...body.y].map(d=>new Date(YEAR,MONTH-1,d).getDay()))].sort();
+    wds.forEach(w=>c8.push({name:u.name,idx:u.idx,kubun:u.kubun,wd:w,ampm:u.ampm,wdsAll:wds}));
+  });
+
+  R={c1,c2,c3,c4,c5,c6,c7,c8};
+  render();
+}
+
+/* ======== 描画 ======== */
+function render(){document.getElementById("results").style.display="block";[1,2,3,4,5,6,7,8].forEach(renderTab);updateBadges();}
+function cnt(a){return{ok:a.filter(r=>r.status==="ok").length,ng:a.filter(r=>r.status==="ng").length,warn:a.filter(r=>r.status==="warn").length,all:a.length};}
+function summ(id,c,label){document.getElementById(id).innerHTML=`<span class="chip all">${label} ${c.all}名</span><span class="chip ok">OK ${c.ok}</span>`+(c.ng?`<span class="chip ng">不一致 ${c.ng}</span>`:``)+(c.warn?`<span class="chip warn">要確認 ${c.warn}</span>`:``);}
+function jd(s){return`<span class="jd ${s}">${s==="ok"?"OK":s==="ng"?"不一致":"要確認"}</span>`;}
+function onlyNg(p){const el=document.querySelector(`.onlyng[data-p="${p}"]`);return el&&el.checked;}
+function pg(i){return`<span class="pg">P${i+1}</span>`;}
+function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function tbl(cols){return`<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`;}
+function wrap(h){return`<div style="max-height:70vh;overflow:auto">${h}</tbody></table></div>`;}
+function er(n){return`<tr><td colspan="${n}" class="empty">該当なし</td></tr>`;}
+
+function renderTab(p){
+  if(p===1){const d=R.c1;summ("summ1",cnt(d),"対象");let rows=d.filter(r=>!onlyNg(1)||r.status!=="ok");
+    let h=tbl(["氏名","区分","判定","本体 実績日","個別(Ⅰ2+Ⅱ)","提供体制Ⅰ","差分"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td>${jd(r.status)}</td><td class="days">${r.hon}</td><td class="days">${r.kun}</td><td class="days">${r.tei}</td><td class="miss">${esc(r.detail)}</td></tr>`).join("")||er(7);
+    document.getElementById("tbl1").innerHTML=wrap(h);}
+  if(p===2){const box=document.getElementById("tbl2");
+    if(!R.c2){document.getElementById("summ2").innerHTML="";box.innerHTML=`<div class="offmsg">口腔ケア管理表(Excel)が未取込のため②は未検出です。管理表を読み込むと照合します。</div>`;return;}
+    const d=R.c2;summ("summ2",cnt(d),"管理表");let rows=d.filter(r=>!onlyNg(2)||r.status!=="ok");
+    let h=tbl(["氏名","区分","判定","管理表 実施日","提供票 加算実績日","差分"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)}${r.idx!=null?" "+pg(r.idx):""}</td><td>${r.kubun}</td><td>${jd(r.status)}</td><td class="days">${r.kanri}</td><td class="days">${r.teikyo}</td><td class="miss">${esc(r.detail)}</td></tr>`).join("")||er(6);
+    box.innerHTML=wrap(h);}
+  if(p===3){const d=R.c3;summ("summ3",cnt(d),"事業対象者");let rows=d.filter(r=>!onlyNg(3)||r.status!=="ok");
+    let h=tbl(["氏名","判定","算定","予定曜日","週回数","適切","備考"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${jd(r.status)}</td><td>${r.used}</td><td>${r.wd}</td><td style="text-align:center">${r.pw}</td><td>${r.expect}</td><td class="miss">${esc(r.detail)}</td></tr>`).join("")||er(7);
+    document.getElementById("tbl3").innerHTML=wrap(h);}
+  if(p===4){const d=R.c4;const c=cnt(d);document.getElementById("summ4").innerHTML=`<span class="chip all">送迎減算 ${c.all}名</span>`+(c.ng?`<span class="chip ng">種別不一致 ${c.ng}</span>`:``)+(c.warn?`<span class="chip warn">要確認 ${c.warn}</span>`:``);
+    let h=tbl(["氏名","区分","本体種別","減算種別","送迎減算日","本体 実績日","判定/備考"]);
+    h+=d.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td>${r.btype}</td><td>${r.sgtype}</td><td class="days">${r.soge}</td><td class="days">${r.hon}</td><td class="miss">${jd(r.status)} ${esc(r.detail)}</td></tr>`).join("")||er(7);
+    document.getElementById("tbl4").innerHTML=wrap(h);}
+  if(p===5){const d=R.c5;document.getElementById("summ5").innerHTML=`<span class="chip all">実績ゼロ ${d.length}名</span>`;
+    let h=tbl(["氏名","区分","ページ"]);h+=d.map(r=>`<tr class="warn"><td>${esc(r.name)}</td><td>${r.kubun}</td><td>P${r.idx+1}</td></tr>`).join("")||er(3);
+    document.getElementById("tbl5").innerHTML=wrap(h);}
+  if(p===6){const d=R.c6;summ("summ6",cnt(d),"介護予防・週2");let rows=d.filter(r=>!onlyNg(6)||r.status!=="ok");
+    let h=tbl(["氏名","判定","予定曜日","提供体制 単位","備考"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${jd(r.status)}</td><td>${r.wd}</td><td style="text-align:center">${r.unit}</td><td class="miss">${esc(r.detail)}</td></tr>`).join("")||er(5);
+    document.getElementById("tbl6").innerHTML=wrap(h);}
+  if(p===7){const d=R.c7;summ("summ7",cnt(d),"対象");let rows=d.filter(r=>!onlyNg(7)||r.status!=="ok");
+    let h=tbl(["氏名","区分","口腔加算","栄養スク","単位","管理表","判定/備考"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td>${r.koku}</td><td>${r.es}</td><td style="text-align:center">${r.unit}</td><td>${r.tgt}</td><td class="miss">${jd(r.status)} ${esc(r.detail)}</td></tr>`).join("")||er(7);
+    document.getElementById("tbl7").innerHTML=wrap(h);}
+  if(p===8){const d=R.c8;const uniq=new Set(d.map(e=>e.name)).size;
+    const multi=new Set(d.filter(e=>e.wdsAll.length>1).map(e=>e.name));
+    document.getElementById("summ8").innerHTML=`<span class="chip all">皆勤者 ${uniq}名</span>`+(multi.size?`<span class="chip warn">うち複数曜日 ${multi.size}名</span>`:``)+`<span class="chip ok">のべ ${d.length}枠</span>`;
+    const grid={};d.forEach(e=>{const g=grid[e.wd]=grid[e.wd]||{AM:[],PM:[]};if(!g[e.ampm])g[e.ampm]=[];
+      const m=e.wdsAll.length>1;
+      const lbl=esc(e.name)+"（"+e.kubun+"）"+(m?" ["+e.wdsAll.map(w=>WD[w]).join("・")+"]":"");
+      g[e.ampm].push(m?`<b style="color:#2f6fb0">${lbl}</b>`:lbl);});
+    let h=tbl(["曜日","午前 (AM)","午後 (PM)"]);let any=false;
+    [1,2,3,4,5,6,0].forEach(w=>{const g=grid[w];if(!g)return;any=true;
+      h+=`<tr><td style="font-weight:bold;text-align:center">${WD[w]}</td><td>${(g.AM||[]).join("<br>")||"—"}</td><td>${(g.PM||[]).join("<br>")||"—"}</td></tr>`;});
+    if(!any)h+=er(3);
+    document.getElementById("tbl8").innerHTML=wrap(h)+`<div class="hint"><b style="color:#2f6fb0">青字</b>＝複数曜日を利用する皆勤者。［　］内がその方の全利用曜日です（例：火の枠に「[火・木]」なら火・木の週2利用）。</div>`;}
+}
+function updateBadges(){
+  const map={1:R.c1,2:R.c2,3:R.c3,4:R.c4,5:R.c5,6:R.c6,7:R.c7,8:R.c8};
+  document.querySelectorAll(".tab").forEach(t=>{const d=map[t.dataset.t];let b;
+    if(d==null)b=`<span class="badge off">–</span>`;
+    else if(t.dataset.t==="5")b=`<span class="badge warn">${R.c5.length}</span>`;
+    else if(t.dataset.t==="8")b=`<span class="badge ok">${new Set(R.c8.map(e=>e.name)).size}</span>`;
+    else{const c=cnt(d);if(c.ng)b=`<span class="badge ng">${c.ng}</span>`;else if(c.warn)b=`<span class="badge warn">${c.warn}</span>`;else b=`<span class="badge ok">✓</span>`;}
+    const old=t.querySelector(".badge");if(old)old.remove();t.insertAdjacentHTML("beforeend",b);});
+}
+
+/* ======== 入出力 ======== */
+let pdfBuf=null,kanriBuf=null;
+function setDrop(z,i,n,cb){const zone=document.getElementById(z),input=document.getElementById(i),nel=document.getElementById(n);
+  const h=f=>{if(!f)return;const rd=new FileReader();rd.onload=e=>{cb(e.target.result);nel.textContent="✓ "+f.name;refresh();};rd.readAsArrayBuffer(f);};
+  input.addEventListener("change",e=>h(e.target.files[0]));
+  zone.addEventListener("dragover",e=>{e.preventDefault();zone.classList.add("on");});
+  zone.addEventListener("dragleave",()=>zone.classList.remove("on"));
+  zone.addEventListener("drop",e=>{e.preventDefault();zone.classList.remove("on");h(e.dataTransfer.files[0]);});}
+setDrop("dropPdf","pdfInput","pdfName",b=>pdfBuf=b);
+setDrop("dropKanri","kanriInput","kanriName",b=>kanriBuf=b);
+function refresh(){document.getElementById("runBtn").disabled=!pdfBuf;
+  document.getElementById("status").textContent=pdfBuf?"準備完了。チェックを実行できます（管理表は任意）。":"提供票PDFを読み込んでください。";}
+document.getElementById("runBtn").addEventListener("click",async()=>{
+  const st=document.getElementById("status"),btn=document.getElementById("runBtn");btn.disabled=true;st.textContent="解析中…";
+  try{
+    const users=await parsePDF(pdfBuf.slice(0));
+    KOKU=kanriBuf?parseKoku(kanriBuf):null;
+    SCR=kanriBuf?parseScr(kanriBuf):null;
+    st.textContent=`対象：令和${YEAR-2018}年${MONTH}月分 ／ 利用者 ${users.length}名`+(KOKU?` / 口腔管理表 ${Object.keys(KOKU).length}名`:` / 口腔管理表 未取込`)+(SCR?` / スクリーニング ${MONTH}月対象${Object.keys(SCR.target).length}名`:` / スクリーニング 未取込`);
+    runChecks(users);document.getElementById("results").scrollIntoView({behavior:"smooth"});
+  }catch(e){st.textContent="エラー: "+e.message;console.error(e);}
+  btn.disabled=false;});
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("act"));document.querySelectorAll(".panel").forEach(x=>x.classList.remove("act"));
+  t.classList.add("act");document.getElementById("panel"+t.dataset.t).classList.add("act");}));
+document.querySelectorAll(".onlyng").forEach(c=>c.addEventListener("change",()=>[1,2,3,6,7].forEach(renderTab)));
+document.getElementById("csvBtn").addEventListener("click",()=>{
+  const q=v=>{v=String(v==null?"":v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};const jt=s=>s==="ok"?"OK":s==="ng"?"不一致":"要確認";
+  let csv="【①通所介護3項目突合】\n氏名,区分,判定,本体実績日,個別Ⅰ2,提供体制Ⅰ,差分\n";R.c1.forEach(r=>csv+=[r.name,r.kubun,jt(r.status),r.hon,r.kun,r.tei,r.detail].map(q).join(",")+"\n");
+  if(R.c2){csv+="\n【②口腔機能向上加算】\n氏名,区分,判定,管理表実施日,提供票実績日,差分\n";R.c2.forEach(r=>csv+=[r.name,r.kubun,jt(r.status),r.kanri,r.teikyo,r.detail].map(q).join(",")+"\n");}
+  csv+="\n【③事業対象者11/12】\n氏名,判定,算定,予定曜日,週回数,適切,備考\n";R.c3.forEach(r=>csv+=[r.name,jt(r.status),r.used,r.wd,r.pw,r.expect,r.detail].map(q).join(",")+"\n");
+  csv+="\n【④送迎減算(+⑦種別)】\n氏名,区分,本体種別,減算種別,送迎減算日,本体実績日,判定,備考\n";R.c4.forEach(r=>csv+=[r.name,r.kubun,r.btype,r.sgtype,r.soge,r.hon,jt(r.status),r.detail].map(q).join(",")+"\n");
+  csv+="\n【⑤実績ゼロ】\n氏名,区分,ページ\n";R.c5.forEach(r=>csv+=[r.name,r.kubun,"P"+(r.idx+1)].map(q).join(",")+"\n");
+  csv+="\n【⑥提供体制加算 単位(介護予防・週2)】\n氏名,判定,予定曜日,提供体制単位,備考\n";R.c6.forEach(r=>csv+=[r.name,jt(r.status),r.wd,r.unit,r.detail].map(q).join(",")+"\n");
+  csv+="\n【⑧⑨栄養スクリーニング】\n氏名,区分,口腔加算,栄養スク,単位,管理表,判定,備考\n";R.c7.forEach(r=>csv+=[r.name,r.kubun,r.koku,r.es,r.unit,r.tgt,jt(r.status),r.detail].map(q).join(",")+"\n");
+  csv+="\n【⑩皆勤者(曜日×AM/PM)】\n曜日,時間帯,氏名,区分,全利用曜日,複数曜日\n";R.c8.slice().sort((a,b)=>(a.wd||7)-(b.wd||7)||a.ampm.localeCompare(b.ampm)).forEach(r=>csv+=[WD[r.wd],r.ampm,r.name,r.kubun,r.wdsAll.map(w=>WD[w]).join("・"),r.wdsAll.length>1?"○":""].map(q).join(",")+"\n");
+  navigator.clipboard.writeText(csv).then(()=>alert("結果をコピーしました。Excelに貼り付けできます。"),()=>{const t=document.createElement("textarea");t.value=csv;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();alert("コピーしました。");});});
+refresh();
+</script>
+</body>
+</html>
