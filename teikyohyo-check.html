@@ -157,7 +157,7 @@ function norm(s){if(!s)return"";s=String(s).replace(/[（(].*?[）)]/g,"").repla
 /* ---- サービス分類（種別付き） ---- */
 function classify(nm){
   let n=nm.replace(/[ \u3000]/g,"").replace(/\d{1,2}:\d{2}/g,"").replace(/[〜～~]/g,"");
-  const type=/基準緩和型/.test(n)?"基準緩和":/介護予防型/.test(n)?"介護予防":/通所介護/.test(n)?"通所介護":"";
+  const type=/基準緩和型/.test(n)?"基準緩和":/介護予防型/.test(n)?"介護予防":/通所型独自/.test(n)?"独自":/通所介護/.test(n)?"通所介護":"";
   const add=/加算|減算|口腔|ＡＤＬ|ADL|科学的|処遇|入浴|栄養|提供体制|個別|スクリーニング/.test(n);
   let cls=null;
   if(n.includes("送迎減算"))cls="送迎減算";
@@ -166,7 +166,7 @@ function classify(nm){
   else if(n.includes("個別機能訓練加算"))cls=/Ⅰ[２2]/.test(n)?"個別Ⅰ2":"個別Ⅰ1";
   else if(n.includes("サービス提供体制加算"))cls="提供体制";
   else if(n.includes("通所介護")&&!add&&/(1[1-9]|１[１-９])$/.test(n))cls="本体介護";
-  else if(/(基準緩和型|介護予防型)通所サービス/.test(n)&&!add){cls=/(12|１２)$/.test(n)?"基準12":/(11|１１)$/.test(n)?"基準11":"基準本体";}
+  else if(/(基準緩和型通所|介護予防型通所|通所型独自)サービス/.test(n)&&!add){cls=/(12|１２)$/.test(n)?"基準12":/(11|１１)$/.test(n)?"基準11":"基準本体";}
   return {cls,type};
 }
 
