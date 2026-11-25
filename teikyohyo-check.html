@@ -93,6 +93,7 @@
         <div class="tab" data-t="7">⑧⑨ 栄養スクリーニング</div>
         <div class="tab" data-t="8">⑩ 皆勤者</div>
         <div class="tab" data-t="9">⑪ 種別混在</div>
+        <div class="tab" data-t="10">⑫ 送迎減算上限</div>
       </div>
 
       <div class="panel act" id="panel1">
@@ -144,6 +145,12 @@
         <div class="desc"><b>⑪ 種別混在チェック</b>　1人の提供票の中で<b>基準緩和型</b>と<b>介護予防型</b>（および通所型独自）が<b>混ざっていないか</b>を確認します。通常は契約により種別が1つに統一されるため、混在＝利用パターンの登録ミスの可能性です。<br><span style="color:#a8791b">※ 午前利用の基準緩和の方が午後に振り替えた際、介護予防のコードで登録されるケースなどを検出します。該当日を種別ごとに表示します。</span></div>
         <div class="summ" id="summ9"></div>
         <div id="tbl9"></div>
+      </div>
+      <div class="panel" id="panel10">
+        <div class="desc"><b>⑫ 送迎減算の月上限チェック（金沢市）</b>　<b>要支援1は月8回</b>、<b>要支援2は月16回</b>までしか送迎減算を算定できません。上限を超えていればエラーを表示します。回数は<b>別表の合計÷単位(47)</b>＝正確な算定回数で数えます（往復は2回）。<br><span style="color:#a8791b">※ 対象は基準緩和型・介護予防型（金沢市の総合事業）の方のみ。通所型独自（志賀町）は対象外です。要支援1・2以外（事業対象者等）は集計しません。</span></div>
+        <div class="summ" id="summ10"></div>
+        <div class="filter"><label><input type="checkbox" class="onlyng" data-p="10"> 上限超過のみ</label></div>
+        <div id="tbl10"></div>
       </div>
     </div>
     <div class="runbar" style="justify-content:flex-end">
@@ -236,6 +243,10 @@ function parseBetsu(items){
     const u=items.filter(i=>Math.abs(i.y-c.y)<4&&i.x>c.x&&i.x<320&&/^\d+$/.test(i.s)).sort((a,b)=>a.x-b.x)[0];
     const {cls,type}=classify(seg);
     if(cls&&!bs[cls])bs[cls]={code:c.s,unit:u?+u.s:null,type};
+    // 送迎減算の回数＝別表の「合計÷単位(47)」。行内の数値のうち47で割り切れる最大値/47（例 -47 12 -564 → 564/47=12回）
+    if(cls==="送迎減算"){const mags=items.filter(i=>Math.abs(i.y-c.y)<4&&i.x>c.x&&/^-?\d+$/.test(i.s)).map(i=>Math.abs(+i.s));
+      const cand=mags.filter(m=>m>0&&m%47===0).map(m=>m/47);const kai=cand.length?Math.max(...cand):null;
+      if(bs[cls]&&bs[cls].kai==null)bs[cls].kai=kai;}
   });
   return {nn,bs};
 }
@@ -413,12 +424,26 @@ function runChecks(users){
       detail:parts.map(p=>`${p.lbl}：${p.days.join(",")||"―"}日`).join(" ／ ")});
   });
 
-  R={c1,c2,c3,c4,c5,c6,c7,c8,c9};
+  // ⑫ 送迎減算の月上限（金沢市：要支援1=8回、要支援2=16回）
+  const c10=[];
+  const SGLIM={"要支援1":8,"要支援2":16};
+  users.forEach(u=>{
+    const lim=SGLIM[u.kubun];if(lim==null)return; // 要支援1・2のみ
+    const sg=u.svc["送迎減算"];if(!sg)return;
+    if(!(sg.type==="基準緩和"||sg.type==="介護予防"))return; // 金沢市の総合事業のみ（通所型独自＝志賀町は対象外）
+    const bsg=u.betsu&&u.betsu.bs["送迎減算"];
+    let kai=(bsg&&bsg.kai!=null)?bsg.kai:null;const src=kai!=null?"別表回数":"実績日数";
+    if(kai==null)kai=sg.j.size;
+    const over=kai>lim;
+    c10.push({name:u.name,idx:u.idx,kubun:u.kubun,type:(TLBL[sg.type]||sg.type),kai,lim,src,status:over?"ng":"ok",detail:over?`上限${lim}回を${kai-lim}回超過`:`上限${lim}回以内`});
+  });
+
+  R={c1,c2,c3,c4,c5,c6,c7,c8,c9,c10};
   render();
 }
 
 /* ======== 描画 ======== */
-function render(){document.getElementById("results").style.display="block";[1,2,3,4,5,6,7,8,9].forEach(renderTab);updateBadges();}
+function render(){document.getElementById("results").style.display="block";[1,2,3,4,5,6,7,8,9,10].forEach(renderTab);updateBadges();}
 function cnt(a){return{ok:a.filter(r=>r.status==="ok").length,ng:a.filter(r=>r.status==="ng").length,warn:a.filter(r=>r.status==="warn").length,all:a.length};}
 function summ(id,c,label){document.getElementById(id).innerHTML=`<span class="chip all">${label} ${c.all}名</span><span class="chip ok">OK ${c.ok}</span>`+(c.ng?`<span class="chip ng">不一致 ${c.ng}</span>`:``)+(c.warn?`<span class="chip warn">要確認 ${c.warn}</span>`:``);}
 function jd(s){return`<span class="jd ${s}">${s==="ok"?"OK":s==="ng"?"不一致":"要確認"}</span>`;}
@@ -476,9 +501,15 @@ function renderTab(p){
     let h=tbl(["氏名","区分","混在している種別","該当日（種別別）"]);
     h+=d.map(r=>`<tr class="ng"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td><b style="color:#c0392b">${esc(r.types)}</b></td><td>${esc(r.detail)}</td></tr>`).join("")||er(4);
     document.getElementById("tbl9").innerHTML=wrap(h)+`<div class="hint">1人の中で基準緩和型と介護予防型（または通所型独自）が混在している方の一覧です。該当日を種別ごとに表示しているので、<b>本来の種別と違う日</b>（午後振替で介護予防になった等）を特定できます。混在がなければ全員正常です。</div>`;}
+  if(p===10){const d=R.c10;const c=cnt(d);
+    document.getElementById("summ10").innerHTML=`<span class="chip all">要支援1・2 ${c.all}名</span>`+(c.ng?`<span class="chip ng">上限超過 ${c.ng}名</span>`:`<span class="chip ok">超過なし ✓</span>`);
+    let rows=d.filter(r=>!onlyNg(10)||r.status!=="ok");
+    let h=tbl(["氏名","区分","種別","送迎減算 回数","月上限","判定/備考"]);
+    h+=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td>${esc(r.type)}</td><td class="days"><b${r.status==="ng"?' style="color:#c0392b"':''}>${r.kai}回</b> <span style="color:#888">(${r.src})</span></td><td>${r.lim}回</td><td class="miss">${jd(r.status)} ${esc(r.detail)}</td></tr>`).join("")||er(6);
+    document.getElementById("tbl10").innerHTML=wrap(h)+`<div class="hint">金沢市の送迎減算上限（要支援1＝月8回、要支援2＝月16回）を超えている方を検出します。回数は別表の算定回数（往復2回）で数えます。別表が取得できない場合は実績日数で代用し「(実績日数)」と表示します。</div>`;}
 }
 function updateBadges(){
-  const map={1:R.c1,2:R.c2,3:R.c3,4:R.c4,5:R.c5,6:R.c6,7:R.c7,8:R.c8,9:R.c9};
+  const map={1:R.c1,2:R.c2,3:R.c3,4:R.c4,5:R.c5,6:R.c6,7:R.c7,8:R.c8,9:R.c9,10:R.c10};
   document.querySelectorAll(".tab").forEach(t=>{const d=map[t.dataset.t];let b;
     if(d==null)b=`<span class="badge off">–</span>`;
     else if(t.dataset.t==="5")b=`<span class="badge warn">${R.c5.length}</span>`;
@@ -513,7 +544,7 @@ document.getElementById("runBtn").addEventListener("click",async()=>{
 document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("act"));document.querySelectorAll(".panel").forEach(x=>x.classList.remove("act"));
   t.classList.add("act");document.getElementById("panel"+t.dataset.t).classList.add("act");}));
-document.querySelectorAll(".onlyng").forEach(c=>c.addEventListener("change",()=>[1,2,3,6,7].forEach(renderTab)));
+document.querySelectorAll(".onlyng").forEach(c=>c.addEventListener("change",()=>[1,2,3,6,7,10].forEach(renderTab)));
 document.getElementById("csvBtn").addEventListener("click",()=>{
   const q=v=>{v=String(v==null?"":v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};const jt=s=>s==="ok"?"OK":s==="ng"?"不一致":"要確認";
   let csv="【①通所介護3項目突合】\n氏名,区分,判定,本体実績日,個別Ⅰ2,提供体制Ⅰ,差分\n";R.c1.forEach(r=>csv+=[r.name,r.kubun,jt(r.status),r.hon,r.kun,r.tei,r.detail].map(q).join(",")+"\n");
@@ -525,6 +556,7 @@ document.getElementById("csvBtn").addEventListener("click",()=>{
   csv+="\n【⑧⑨栄養スクリーニング】\n氏名,区分,口腔加算,栄養スク,単位,管理表,判定,備考\n";R.c7.forEach(r=>csv+=[r.name,r.kubun,r.koku,r.es,r.unit,r.tgt,jt(r.status),r.detail].map(q).join(",")+"\n");
   csv+="\n【⑩皆勤者(曜日×AM/PM)】\n曜日,時間帯,氏名,区分,全利用曜日,複数曜日\n";R.c8.slice().sort((a,b)=>(a.wd||7)-(b.wd||7)||a.ampm.localeCompare(b.ampm)).forEach(r=>csv+=[WD[r.wd],r.ampm,r.name,r.kubun,r.wdsAll.map(w=>WD[w]).join("・"),r.wdsAll.length>1?"○":""].map(q).join(",")+"\n");
   csv+="\n【⑪種別混在】\n氏名,区分,混在種別,該当日(種別別)\n";R.c9.forEach(r=>csv+=[r.name,r.kubun,r.types,r.detail].map(q).join(",")+"\n");
+  csv+="\n【⑫送迎減算上限(金沢市)】\n氏名,区分,種別,送迎減算回数,月上限,回数ソース,判定,備考\n";R.c10.forEach(r=>csv+=[r.name,r.kubun,r.type,r.kai,r.lim,r.src,jt(r.status),r.detail].map(q).join(",")+"\n");
   navigator.clipboard.writeText(csv).then(()=>alert("結果をコピーしました。Excelに貼り付けできます。"),()=>{const t=document.createElement("textarea");t.value=csv;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();alert("コピーしました。");});});
 refresh();
 </script>
