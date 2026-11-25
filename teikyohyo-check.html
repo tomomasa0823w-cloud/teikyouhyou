@@ -92,6 +92,7 @@
         <div class="tab" data-t="6">⑥ 提供体制加算</div>
         <div class="tab" data-t="7">⑧⑨ 栄養スクリーニング</div>
         <div class="tab" data-t="8">⑩ 皆勤者</div>
+        <div class="tab" data-t="9">⑪ 種別混在</div>
       </div>
 
       <div class="panel act" id="panel1">
@@ -139,6 +140,11 @@
         <div class="summ" id="summ8"></div>
         <div id="tbl8"></div>
       </div>
+      <div class="panel" id="panel9">
+        <div class="desc"><b>⑪ 種別混在チェック</b>　1人の提供票の中で<b>基準緩和型</b>と<b>介護予防型</b>（および通所型独自）が<b>混ざっていないか</b>を確認します。通常は契約により種別が1つに統一されるため、混在＝利用パターンの登録ミスの可能性です。<br><span style="color:#a8791b">※ 午前利用の基準緩和の方が午後に振り替えた際、介護予防のコードで登録されるケースなどを検出します。該当日を種別ごとに表示します。</span></div>
+        <div class="summ" id="summ9"></div>
+        <div id="tbl9"></div>
+      </div>
     </div>
     <div class="runbar" style="justify-content:flex-end">
       <button class="sub" id="csvBtn">結果をCSVでコピー</button>
@@ -179,7 +185,7 @@ function extractName(items){
   if(fr){let c=sm.filter(it=>it.y<fr.y&&fr.y-it.y<22);if(c.length)target=c.reduce((a,b)=>Math.abs(a.y-(fr.y-12))<Math.abs(b.y-(fr.y-12))?a:b);}
   if(!target){let lab=items.find(it=>it.s.includes("⽒")||it.s.includes("被保険"));if(lab)target=sm.filter(it=>Math.abs(it.y-lab.y)<8).sort((a,b)=>b.x-a.x)[0];}
   if(!target&&sm.length)target=sm[0];if(!target)return"?";
-  return items.filter(it=>Math.abs(it.y-target.y)<5&&it.x>=275&&it.x<640).map(it=>({x:it.x,t:it.s.replace(/様.*$/,"").replace(/[（(].*?[）)]/g,"")})).sort((a,b)=>a.x-b.x).map(o=>o.t).join("").replace(/[^一-龥々ヶぁ-ん]/g,"").slice(0,6)||"?";
+  return items.filter(it=>Math.abs(it.y-target.y)<5&&it.x>=275&&it.x<640).map(it=>({x:it.x,t:it.s.replace(/様.*$/,"").replace(/[（(].*?[）)]/g,"")})).sort((a,b)=>a.x-b.x).map(o=>o.t).join("").replace(/[^々一-鿿豈-﫿ぁ-ゖァ-ー]/g,"").slice(0,8)||"?";
 }
 
 /* ---- 第6表 ---- */
@@ -200,18 +206,20 @@ function parsePage(items,idx){
   const namew=items.filter(it=>it.x>20&&it.x<175&&!FACILITY.test(it.s));
   const codeYs=items.filter(it=>/A6\d{4}|15\d{4}|78\d{4}/.test(it.s)).map(it=>it.y).sort((a,b)=>b-a);
   const labels=items.filter(it=>it.x>=342&&it.x<=348&&/^[予実定績]$/.test(it.s)).map(it=>({y:it.y,t:(it.s==="実"||it.s==="績")?"実績":"予定"}));
-  const svc={};let allj=new Set();
+  const svc={};let allj=new Set();const sohgo={};
   for(let j=0;j<codeYs.length;j++){const cy=codeYs[j],ny=(j+1<codeYs.length)?codeYs[j+1]:cy-14;
     const seg=namew.filter(it=>it.y>ny+2&&it.y<=cy+2).sort((a,b)=>b.y-a.y||a.x-b.x);
     const nm=seg.map(it=>it.s).join("").replace(/\d{1,2}:\d{2}/g,"");const {cls,type}=classify(nm);
     const pick=(t)=>{let best=null;labels.forEach(l=>{if(l.t===t&&l.y>ny+1&&l.y<cy+8){if(best==null||l.y>best)best=l.y;}});return best;};
     const ji=pick("実績"),yo=pick("予定");const jd=ji!=null?rday(ji):new Set(),yd=yo!=null?rday(yo):new Set();
     jd.forEach(d=>allj.add(d));
-    if(cls){if(!svc[cls])svc[cls]={j:new Set(),y:new Set(),type};jd.forEach(d=>svc[cls].j.add(d));yd.forEach(d=>svc[cls].y.add(d));}}
+    if(cls){if(!svc[cls])svc[cls]={j:new Set(),y:new Set(),type};jd.forEach(d=>svc[cls].j.add(d));yd.forEach(d=>svc[cls].y.add(d));
+      // ⑪ 総合事業 本体サービスの種別（基準緩和/介護予防/独自）を種別ごとに日で保持
+      if(/^基準/.test(cls)&&(type==="基準緩和"||type==="介護予防"||type==="独自")){if(!sohgo[type])sohgo[type]={j:new Set(),y:new Set()};jd.forEach(d=>sohgo[type].j.add(d));yd.forEach(d=>sohgo[type].y.add(d));}}}
   const times=items.filter(it=>it.x<70&&/\d{1,2}:\d{2}/.test(it.s)).sort((a,b)=>b.y-a.y);
   const t0=times.length?(times[0].s.match(/(\d{1,2}):\d{2}/)||[])[1]:null;
   const ampm=t0==null?"?":(+t0<12?"AM":"PM");
-  return{idx,name,nn:norm(name),kubun,svc,allj,ampm};
+  return{idx,name,nn:norm(name),kubun,svc,allj,ampm,sohgo};
 }
 
 /* ---- 別表（単位数） ---- */
@@ -219,7 +227,8 @@ function parseBetsu(items){
   const fns=items.map(i=>i.s).join("").replace(/\s/g,"");
   if(fns.includes("要介護状態区分"))return null;
   if(!(fns.includes("処遇改善")||fns.includes("種類支給限度")))return null;
-  const nmM=fns.match(/([一-龥々ヶ]{2,8})様\(?\d{10}/);const nn=nmM?norm(nmM[1]):null;
+  let bn=extractName(items);let nn=(bn&&bn!=="?")?norm(bn):null;
+  if(!nn){const nmM=fns.match(/([々一-鿿豈-﫿ァ-ー]{2,8})様\(?\d{10}/);nn=nmM?norm(nmM[1]):null;bn=nmM?nmM[1]:bn;}
   const codes=items.filter(i=>/^(A6\d{4}|15\d{4}|78\d{4})$/.test(i.s));
   const bs={};
   codes.forEach(c=>{
@@ -242,8 +251,8 @@ async function parsePDF(buf){
     if(u){U.push(u);continue;}
     const b=parseBetsu(items);if(b&&b.nn)B.push(b);
   }
-  const bmap={};B.forEach(b=>{if(!bmap[b.nn])bmap[b.nn]=b;});
-  U.forEach(u=>{u.betsu=bmap[u.nn]||null;});
+  const bmap={},bmapL={};B.forEach(b=>{if(!bmap[b.nn])bmap[b.nn]=b;const lk=lkey(b.nn);if(lk&&!bmapL[lk])bmapL[lk]=b;});
+  U.forEach(u=>{u.betsu=bmap[u.nn]||bmapL[lkey(u.name)]||null;});
   return U;
 }
 
@@ -278,7 +287,7 @@ function toDay(v){if(v==null)return 0;if(typeof v==="number")return(v>=1&&v<=31)
 /* ---- スクリーニング管理表（新様式：実施月列＋算定=対象／ひな形の算定サイクル列も対応） ---- */
 function parseScr(buf){
   const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
-  const target={},excl={};
+  const target={},excl={},targetL={},exclL={};
   const ss=wb.SheetNames.filter(sn=>/スクリ/.test(sn));
   for(const sn of (ss.length?ss:wb.SheetNames)){
     const ao=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
@@ -289,13 +298,13 @@ function parseScr(buf){
       if(a>=0&&b>=0&&a!==b){hr=r;nc=a;mc=b;gc=g;break;}}
     if(hr<0)continue;
     for(let r=hr+1;r<ao.length;r++){const nm=ao[r]&&ao[r][nc];if(nm==null||String(nm).trim()===""||String(nm).replace(/\s/g,"").includes("氏名")||String(nm).includes("例"))continue;
-      const nn=norm(nm);if(!nn||nn.length<2)continue;
-      const g=gc>=0&&ao[r][gc]?String(ao[r][gc]):"対象";if(!/対象|記録/.test(g)){excl[nn]=true;continue;} // 別デイ・自費・希望なし等
+      const nn=norm(nm);if(!nn||nn.length<2)continue;const lk=lkey(nm);
+      const g=gc>=0&&ao[r][gc]?String(ao[r][gc]):"対象";if(!/対象|記録/.test(g)){excl[nn]=true;if(lk)exclL[lk]=true;continue;} // 別デイ・自費・希望なし等
       const cyc=ao[r][mc]?String(ao[r][mc]).replace(/\s/g,""):"";
-      if(cyc.includes("算定なし")||cyc.includes("算定無")){excl[nn]=true;continue;}
-      if(new RegExp("(^|・)"+MONTH+"(・|月|$)").test(cyc))target[nn]={name:String(nm).trim()};}
+      if(cyc.includes("算定なし")||cyc.includes("算定無")){excl[nn]=true;if(lk)exclL[lk]=true;continue;}
+      if(new RegExp("(^|・)"+MONTH+"(・|月|$)").test(cyc)){target[nn]={name:String(nm).trim()};if(lk)targetL[lk]={name:String(nm).trim()};}}
   }
-  return {target,excl};
+  return {target,excl,targetL,exclL};
 }
 
 /* ======== チェック ======== */
@@ -321,8 +330,10 @@ function runChecks(users){
   });
   // ② 口腔（管理表任意）
   let c2=null;
-  if(KOKU){c2=[];for(const nn in KOKU){const rec=KOKU[nn];const u=users.find(x=>x.nn===nn)||users.find(x=>x.nn&&nn.length>=2&&(x.nn.includes(nn)||nn.includes(x.nn)));
-    if(!u){c2.push({name:rec.name,kubun:"—",status:"warn",kanri:ds(rec.days),teikyo:"（今月の提供票なし）",detail:"提供票に該当者なし 要確認"});continue;}
+  if(KOKU){c2=[];const lkU={};users.forEach(x=>{const k=lkey(x.name);if(k&&!lkU[k])lkU[k]=x;});
+    for(const nn in KOKU){const rec=KOKU[nn];const u=users.find(x=>x.nn===nn)||lkU[lkey(rec.name)]||users.find(x=>x.nn&&nn.length>=2&&(x.nn.includes(nn)||nn.includes(x.nn)));
+    if(!u){if(!rec.days||rec.days.size===0)continue; // 当月口腔実施日なし＆提供票なし＝照合対象外（当月未利用）
+      c2.push({name:rec.name,kubun:"—",status:"warn",kanri:ds(rec.days),teikyo:"（今月の提供票なし）",detail:"提供票に該当者なし 要確認"});continue;}
     const js=new Set([...(u.svc["口腔Ⅱ"]?u.svc["口腔Ⅱ"].j:[]),...(u.svc["口腔Ⅰ"]?u.svc["口腔Ⅰ"].j:[])]);const ok=eq(rec.days,js);let det="";
     if(!ok){const a=diff(rec.days,js),b=diff(js,rec.days);if(a.length)det+="管理表のみ:"+a.join(",")+" ";if(b.length)det+="提供票のみ:"+b.join(",");}
     c2.push({name:u.name,idx:u.idx,kubun:u.kubun,status:ok?"ok":"ng",kanri:ds(rec.days),teikyo:ds(js),detail:det.trim()});}}
@@ -364,7 +375,7 @@ function runChecks(users){
   users.forEach(u=>{
     const koku=u.svc["口腔Ⅰ"]||u.svc["口腔Ⅱ"];const es6=u.svc["栄養スクリーニング"];
     const esU=u.betsu&&u.betsu.bs["栄養スクリーニング"]?u.betsu.bs["栄養スクリーニング"].unit:null;
-    const isTarget=SCR?!!SCR.target[u.nn]:null;const isExcl=SCR?!!SCR.excl[u.nn]:false;
+    const _lk=lkey(u.name);const isTarget=SCR?!!(SCR.target[u.nn]||(_lk&&SCR.targetL[_lk])):null;const isExcl=SCR?!!(SCR.excl[u.nn]||(_lk&&SCR.exclL[_lk])):false;
     let status="ok",det=[];
     // ⑨ 口腔者の単位5
     if(koku&&es6){if(esU!=null&&esU!==5){status="ng";det.push(`栄養スクリーニング=${esU}単位（口腔機能向上加算あり→5単位が適切）`);}}
@@ -390,12 +401,24 @@ function runChecks(users){
     wds.forEach(w=>c8.push({name:u.name,idx:u.idx,kubun:u.kubun,wd:w,ampm:u.ampm,wdsAll:wds}));
   });
 
-  R={c1,c2,c3,c4,c5,c6,c7,c8};
+  // ⑪ 種別混在（基準緩和型／介護予防型が1人の中で混在していないか）
+  const c9=[];
+  const TLBL={"基準緩和":"基準緩和型","介護予防":"介護予防型","独自":"通所型独自"};
+  users.forEach(u=>{
+    const types=Object.keys(u.sohgo||{}).filter(t=>u.sohgo[t].j.size||u.sohgo[t].y.size);
+    if(types.length<=1)return; // 単一種別＝正常
+    const parts=types.map(t=>{const s=new Set([...u.sohgo[t].y,...u.sohgo[t].j]);return{t,lbl:TLBL[t]||t,days:[...s].sort((a,b)=>a-b)};});
+    c9.push({name:u.name,idx:u.idx,kubun:u.kubun,status:"ng",
+      types:parts.map(p=>p.lbl).join(" ＋ "),
+      detail:parts.map(p=>`${p.lbl}：${p.days.join(",")||"―"}日`).join(" ／ ")});
+  });
+
+  R={c1,c2,c3,c4,c5,c6,c7,c8,c9};
   render();
 }
 
 /* ======== 描画 ======== */
-function render(){document.getElementById("results").style.display="block";[1,2,3,4,5,6,7,8].forEach(renderTab);updateBadges();}
+function render(){document.getElementById("results").style.display="block";[1,2,3,4,5,6,7,8,9].forEach(renderTab);updateBadges();}
 function cnt(a){return{ok:a.filter(r=>r.status==="ok").length,ng:a.filter(r=>r.status==="ng").length,warn:a.filter(r=>r.status==="warn").length,all:a.length};}
 function summ(id,c,label){document.getElementById(id).innerHTML=`<span class="chip all">${label} ${c.all}名</span><span class="chip ok">OK ${c.ok}</span>`+(c.ng?`<span class="chip ng">不一致 ${c.ng}</span>`:``)+(c.warn?`<span class="chip warn">要確認 ${c.warn}</span>`:``);}
 function jd(s){return`<span class="jd ${s}">${s==="ok"?"OK":s==="ng"?"不一致":"要確認"}</span>`;}
@@ -448,13 +471,19 @@ function renderTab(p){
       h+=`<tr><td style="font-weight:bold;text-align:center">${WD[w]}</td><td>${(g.AM||[]).join("<br>")||"—"}</td><td>${(g.PM||[]).join("<br>")||"—"}</td></tr>`;});
     if(!any)h+=er(3);
     document.getElementById("tbl8").innerHTML=wrap(h)+`<div class="hint"><b style="color:#2f6fb0">青字</b>＝複数曜日を利用する皆勤者。［　］内がその方の全利用曜日です（例：火の枠に「[火・木]」なら火・木の週2利用）。</div>`;}
+  if(p===9){const d=R.c9;
+    document.getElementById("summ9").innerHTML=`<span class="chip all">総合事業 本体 判定済</span>`+(d.length?`<span class="chip ng">種別混在 ${d.length}名</span>`:`<span class="chip ok">混在なし ✓</span>`);
+    let h=tbl(["氏名","区分","混在している種別","該当日（種別別）"]);
+    h+=d.map(r=>`<tr class="ng"><td>${esc(r.name)} ${pg(r.idx)}</td><td>${r.kubun}</td><td><b style="color:#c0392b">${esc(r.types)}</b></td><td>${esc(r.detail)}</td></tr>`).join("")||er(4);
+    document.getElementById("tbl9").innerHTML=wrap(h)+`<div class="hint">1人の中で基準緩和型と介護予防型（または通所型独自）が混在している方の一覧です。該当日を種別ごとに表示しているので、<b>本来の種別と違う日</b>（午後振替で介護予防になった等）を特定できます。混在がなければ全員正常です。</div>`;}
 }
 function updateBadges(){
-  const map={1:R.c1,2:R.c2,3:R.c3,4:R.c4,5:R.c5,6:R.c6,7:R.c7,8:R.c8};
+  const map={1:R.c1,2:R.c2,3:R.c3,4:R.c4,5:R.c5,6:R.c6,7:R.c7,8:R.c8,9:R.c9};
   document.querySelectorAll(".tab").forEach(t=>{const d=map[t.dataset.t];let b;
     if(d==null)b=`<span class="badge off">–</span>`;
     else if(t.dataset.t==="5")b=`<span class="badge warn">${R.c5.length}</span>`;
     else if(t.dataset.t==="8")b=`<span class="badge ok">${new Set(R.c8.map(e=>e.name)).size}</span>`;
+    else if(t.dataset.t==="9")b=R.c9.length?`<span class="badge ng">${R.c9.length}</span>`:`<span class="badge ok">✓</span>`;
     else{const c=cnt(d);if(c.ng)b=`<span class="badge ng">${c.ng}</span>`;else if(c.warn)b=`<span class="badge warn">${c.warn}</span>`;else b=`<span class="badge ok">✓</span>`;}
     const old=t.querySelector(".badge");if(old)old.remove();t.insertAdjacentHTML("beforeend",b);});
 }
@@ -495,6 +524,7 @@ document.getElementById("csvBtn").addEventListener("click",()=>{
   csv+="\n【⑥提供体制加算 単位(介護予防・週2)】\n氏名,判定,予定曜日,提供体制単位,備考\n";R.c6.forEach(r=>csv+=[r.name,jt(r.status),r.wd,r.unit,r.detail].map(q).join(",")+"\n");
   csv+="\n【⑧⑨栄養スクリーニング】\n氏名,区分,口腔加算,栄養スク,単位,管理表,判定,備考\n";R.c7.forEach(r=>csv+=[r.name,r.kubun,r.koku,r.es,r.unit,r.tgt,jt(r.status),r.detail].map(q).join(",")+"\n");
   csv+="\n【⑩皆勤者(曜日×AM/PM)】\n曜日,時間帯,氏名,区分,全利用曜日,複数曜日\n";R.c8.slice().sort((a,b)=>(a.wd||7)-(b.wd||7)||a.ampm.localeCompare(b.ampm)).forEach(r=>csv+=[WD[r.wd],r.ampm,r.name,r.kubun,r.wdsAll.map(w=>WD[w]).join("・"),r.wdsAll.length>1?"○":""].map(q).join(",")+"\n");
+  csv+="\n【⑪種別混在】\n氏名,区分,混在種別,該当日(種別別)\n";R.c9.forEach(r=>csv+=[r.name,r.kubun,r.types,r.detail].map(q).join(",")+"\n");
   navigator.clipboard.writeText(csv).then(()=>alert("結果をコピーしました。Excelに貼り付けできます。"),()=>{const t=document.createElement("textarea");t.value=csv;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();alert("コピーしました。");});});
 refresh();
 </script>
