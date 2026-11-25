@@ -151,9 +151,11 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 let YEAR=2026,MONTH=8;const WD=["日","月","火","水","木","金","土"];
 const FACILITY=/&|フィットネス|寿リハ|リハビリ|スカイ|ＡＩＭ|AIM|株式会社/;
-const KMAP={"髙":"高","﨑":"崎","嵜":"崎","齋":"斎","齊":"斎","斉":"斎","邊":"辺","邉":"辺","德":"徳","眞":"真","廣":"広","惠":"恵","冨":"富","栁":"柳","濵":"浜","濱":"浜","𠮷":"吉"};
+const KMAP={"髙":"高","﨑":"崎","嵜":"崎","齋":"斎","齊":"斎","斉":"斎","邊":"辺","邉":"辺","德":"徳","眞":"真","廣":"広","惠":"恵","冨":"富","栁":"柳","濵":"浜","濱":"浜","𠮷":"吉","壽":"寿","濤":"涛","瀨":"瀬","假":"仮","會":"会","圓":"円","靑":"青"};
 function norm(s){if(!s)return"";s=String(s).replace(/[（(].*?[）)]/g,"").replace(/様|さん|殿/g,"");s=s.replace(/[\s\u3000・･,、.\-‐―ｰ]/g,"");s=s.replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));return s.split("").map(c=>KMAP[c]||c).join("");}
 
+/* 緩い照合キー：カタカナ→ひらがな、名末の「子⇄コ」表記ゆれを吸収（例 吉村トミ子＝吉村トミコ） */
+function lkey(s){const n=norm(s);if(!n||n.length<2)return"";return n.replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/子$/,"こ");}
 /* ---- サービス分類（種別付き） ---- */
 function classify(nm){
   let n=nm.replace(/[ \u3000]/g,"").replace(/\d{1,2}:\d{2}/g,"").replace(/[〜～~]/g,"");
@@ -437,7 +439,7 @@ function renderTab(p){
   if(p===8){const d=R.c8;const uniq=new Set(d.map(e=>e.name)).size;
     const multi=new Set(d.filter(e=>e.wdsAll.length>1).map(e=>e.name));
     document.getElementById("summ8").innerHTML=`<span class="chip all">皆勤者 ${uniq}名</span>`+(multi.size?`<span class="chip warn">うち複数曜日 ${multi.size}名</span>`:``)+`<span class="chip ok">のべ ${d.length}枠</span>`;
-    const grid={};d.forEach(e=>{const g=grid[e.wd]=grid[e.wd]||{AM:[],PM:[]};if(!g[e.ampm])g[e.ampm]=[];
+    const grid={};d.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja")).forEach(e=>{const g=grid[e.wd]=grid[e.wd]||{AM:[],PM:[]};if(!g[e.ampm])g[e.ampm]=[];
       const m=e.wdsAll.length>1;
       const lbl=esc(e.name)+"（"+e.kubun+"）"+(m?" ["+e.wdsAll.map(w=>WD[w]).join("・")+"]":"");
       g[e.ampm].push(m?`<b style="color:#2f6fb0">${lbl}</b>`:lbl);});
